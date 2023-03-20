@@ -120,9 +120,9 @@ func FLBPluginFlushCtx(plugin, data unsafe.Pointer, length C.int, tag *C.char) i
 			fmt.Println("time provided invalid, defaulting to now.")
 			timestamp = time.Now()
 		}
-		tsstr := timestamp.String()
-		fmt.Printf("tag is %s, ts is %s, record is %s", tagstr, tsstr, string(mstr))
-		fmt.Println()
+		// tsstr := timestamp.String()
+		// fmt.Printf("tag is %s, ts is %s, record is %s", tagstr, tsstr, string(mstr))
+		// fmt.Println()
 		go flushDataToPgsql(mstr, tagstr, timestamp, ctx, wg)
 
 		wg.Wait()

@@ -19,7 +19,7 @@ ldd out_pgsql.so
     Name dummy
 
 [OUTPUT]
-    Name gstdout
+    Name stdout
 ```
 ### content of plugin file
 ```shell
