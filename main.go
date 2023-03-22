@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go-fb-pgsql/entity"
 	"go-fb-pgsql/utils"
+	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -69,13 +70,26 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 			return time.Now().Local()
 		}})
 	if err != nil {
-		fmt.Println("connect fail")
-		fmt.Println(err.Error())
+		log.Println("connect fail")
+		log.Println(err.Error())
 		id := strconv.Itoa(int(rnd.Int63n(1000)))
 		contexts[id] = &ctx
 		output.FLBPluginSetContext(plugin, id)
 		return output.FLB_OK
 	}
+	db, err := conn.DB()
+	if err != nil {
+		log.Println("connect fail")
+		log.Println(err.Error())
+		id := strconv.Itoa(int(rnd.Int63n(1000)))
+		contexts[id] = &ctx
+		output.FLBPluginSetContext(plugin, id)
+		return output.FLB_OK
+	}
+	db.SetConnMaxIdleTime(time.Duration(10 * time.Minute))
+	db.SetConnMaxLifetime(time.Duration(10 * time.Minute))
+	db.SetMaxIdleConns(20)
+	db.SetMaxOpenConns(50)
 	conn.AutoMigrate(&entity.Record{})
 	ctx.conn = conn
 	id := strconv.Itoa(int(rnd.Int63n(1000)))
@@ -102,12 +116,12 @@ func FLBPluginFlushCtx(plugin, data unsafe.Pointer, length C.int, tag *C.char) i
 
 		m, err := decodeRecord(rec)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			continue
 		}
-		wg := &sync.WaitGroup{}
+		// wg := &sync.WaitGroup{}
 
-		wg.Add(1)
+		// wg.Add(1)
 		mstr, _ := json.Marshal(m)
 		tagstr := C.GoString(tag)
 		var timestamp time.Time
@@ -117,15 +131,21 @@ func FLBPluginFlushCtx(plugin, data unsafe.Pointer, length C.int, tag *C.char) i
 		case uint64:
 			timestamp = time.Unix(int64(t), 0)
 		default:
-			fmt.Println("time provided invalid, defaulting to now.")
+			log.Println("time provided invalid, defaulting to now.")
 			timestamp = time.Now()
 		}
 		// tsstr := timestamp.String()
-		// fmt.Printf("tag is %s, ts is %s, record is %s", tagstr, tsstr, string(mstr))
-		// fmt.Println()
-		go flushDataToPgsql(mstr, tagstr, timestamp, ctx, wg)
+		// log.Printf("tag is %s, ts is %s, record is %s", tagstr, tsstr, string(mstr))
+		// log.Println()
+		if ctx.conn != nil {
+			r := entity.Record{Timestamp: timestamp, Tag: tagstr, Data: mstr}
+			if err := ctx.conn.Create(&r).Error; err != nil {
+				log.Println(err.Error())
+				return output.FLB_ERROR
+			}
+		}
 
-		wg.Wait()
+		// wg.Wait()
 	}
 
 	return output.FLB_OK
